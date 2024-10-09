@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../..:/workspaces:cached
+
+    # Overrides default command so things don't shut down after the process ends.
+    command: sleep infinity
+
+    # Runs app on the same network as the database container, allows "forwardPorts" in devcontainer.json function.
+    network_mode: service:mongodb
+
+    # Use "forwardPorts" in **devcontainer.json** to forward an app port locally. 
+    # (Adding the "ports" property to this file will not forward from a Codespace.)
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    restart: unless-stopped
+    # volumes:
+    #   - mongodb-data:/data/db
+
+    # Uncomment to change startup options
+    # environment:
+    #  MONGO_INITDB_ROOT_USERNAME: root
+    #  MONGO_INITDB_ROOT_PASSWORD: example
+    #  MONGO_INITDB_DATABASE: your-database-here
+
+    # Add "forwardPorts": ["27017"] to **devcontainer.json** to forward MongoDB locally.
+    # (Adding the "ports" property to this file will not forward from a Codespace.)
+
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: rabbitmq
+    restart: always
+    ports:
+      - 5672:5672
+      - 5671:5671
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "5672"]
+      interval: 5s
+      timeout: 15s
+      retries: 1
+
+  minio:
+    image: minio/minio
+    # volumes:
+    #   - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: impler
+      MINIO_ROOT_PASSWORD: implers3cr3t
+    ports:
+      - 9000:9000
+      - 9001:9001
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 impler implers3cr3t;
+      /usr/bin/mc mb myminio/impler;
+      exit 0;
+      "
+
+volumes:
+  mongodb-data:
